@@ -84,7 +84,8 @@ label{font-size:.9rem;color:var(--mu)}
   <button class="nav" data-p="lab">🧪 Virtual Lab</button>
   <button class="nav" data-p="kuis">🎯 Kuis HOTS</button>
   <button class="nav" data-p="refleksi">📝 Refleksi & Jurnal</button>
-  <div id="xpb" class="glass" style="margin-top:auto;padding:12px;text-align:center"></div>
+  <button class="nav" style="color:var(--no);margin-top:auto" onclick="resetData()">🗑️ Reset Data</button>
+  <div id="xpb" class="glass" style="padding:12px;text-align:center"></div>
 </nav>
 <main>
 <section id="home" class="on">
@@ -328,6 +329,12 @@ function exportPDF(){const J=window.jspdf;if(!J)return alert('Library jsPDF belu
  w('Rangkuman Capaian Pembelajaran',12,true);
  ['Sistem komputer = perangkat keras + perangkat lunak.','Hardware: input, pemroses (CPU, RAM, ROM), output, storage.','Software: sistem operasi dan program aplikasi; lisensi freeware, shareware, adware, komersial, open/closed source.','Interaksi perangkat: Bluetooth, tethering, CCTV.','Komputer menyimpan data dalam biner (bit, byte, ASCII).'].forEach(t=>w('- '+t));
  d.save('Jurnal-Sistem-Komputer-'+($('#rn').value||'siswa')+'.pdf')}
+// ===== RESET DATA =====
+function resetData(){if(!confirm('Reset semua data? XP, progres modul, skor kuis, dan isian refleksi akan dihapus.'))return;
+ try{localStorage.removeItem('cyberB4')}catch(e){}
+ ST={xp:0,read:{},done:{}};qScore=null;RA={m:0,p:{},t:0};RB=[0,0,0];emo='';
+ ['rn','r1','r2','r3','rj'].forEach(i=>$('#'+i).value='');$('#rk').value='VII';$$('#emo button').forEach(b=>b.classList.remove('on'));
+ xpUI();cat('Hardware');labA();labB();qStart();go('home');toast('Data berhasil direset')}
 </script>
 </body>
 </html>
