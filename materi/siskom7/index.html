@@ -96,7 +96,7 @@ label{font-size:.9rem;color:var(--mu)}
     <div class="glass"><h3>🎓 Capaian Pembelajaran</h3><ul style="padding-left:18px;line-height:1.8">
       <li>Menjelaskan bagian-bagian sistem komputer</li><li>Menjelaskan cara kerja sistem komputer</li><li>Menjelaskan cara data dikodifikasi (biner)</li><li>Memilih spesifikasi perangkat sesuai kebutuhan</li></ul></div>
   </div><br>
-  <div class="glass"><h3>🗺️ Peta Konsep (klik simpul untuk belajar)</h3><div class="cmap" id="cmap"></div></div>
+  <div style="text-align:center;margin:30px 0"><button class="btn" style="font-size:1.2rem;padding:14px 38px" onclick="intro()">🚀 Mulai Belajar</button></div>
 </section>
 
 <section id="materi">
@@ -200,11 +200,11 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 function go(p){$$('section').forEach(s=>s.classList.toggle('on',s.id===p));$$('.nav[data-p]').forEach(n=>n.classList.toggle('on',n.dataset.p===p));$('#side').classList.remove('open');scrollTo(0,0)}
 $$('.nav[data-p]').forEach(n=>n.onclick=()=>go(n.dataset.p));
 // ===== PETA KONSEP =====
-$('#cmap').innerHTML='<div class="node core">Sistem Komputer</div>'+[["🖥️ Perangkat Keras · Input","Hardware"],["⚙️ Prosesor","Hardware"],["🖨️ Output","Hardware"],["💾 Storage","Hardware"],["🧩 Perangkat Lunak","Software"],["🔗 Interaksi Antar Perangkat","Interaksi Perangkat"],["🛠️ Permasalahan & Spesifikasi","Permasalahan Hardware"],["🔢 Sistem Biner","Bilangan Biner"]].map(([a,b])=>`<div class="node" onclick="openCat('${b}')">${a}</div>`).join('');
+function intro(){$('#mb').innerHTML=`<h3 class="grad" style="font-size:1.3rem">Pengantar Sistem Komputer</h3><p style="line-height:1.8;margin:10px 0"><b>Komputer</b> berasal dari kata <i>to compute</i> yang berarti menghitung. Kini komputer adalah peranti elektronik yang menerima data masukan (<i>input</i>), memprosesnya (<i>process</i>), menghasilkan keluaran (<i>output</i>), dan menyimpan data di penyimpanan sekunder (<i>secondary storage</i>).</p><p style="line-height:1.8;margin:10px 0"><b>Sistem komputer</b> adalah gabungan <b>perangkat keras</b> (<i>hardware</i>, komponen fisik) dan <b>perangkat lunak</b> (<i>software</i>, program yang berjalan di hardware) yang bersama-sama melakukan pekerjaan tertentu. Analogi: hardware adalah gitar, software adalah lagu yang dimainkan pada gitar.</p><p class="mu" style="margin-bottom:14px">Ponsel pintar (<i>smartphone</i>) juga merupakan sistem komputer dalam ukuran yang lebih kecil.</p><button class="btn" onclick="closeM();go('materi')">Klik Lanjutkan →</button>`;$('#modal').classList.add('on')}
 function openCat(c){go('materi');cat(c)}
 // ===== MATERI + XP + TANTANGAN =====
 const GRP={
-Hardware:{"⌨️ Input":["Mouse","Keyboard","Scanner","Joystick","Microphone","Barcode Reader"],"⚙️ Proses":["CPU / Prosesor","RAM","ROM"],"🖥️ Output":["Monitor","Printer","Speaker"],"💾 Storage":["Hard Disk (HDD)","SSD","Flash Drive","Compact Disc","SD / MicroSD Card","Cloud Storage"],"🧩 Peranti Lainnya":["Motherboard","Casing","PSU (Power Supply)","VGA Card","GPU","Sound Card","LAN Card"]},
+Hardware:{"⌨️ Input":["Mouse","Keyboard","Scanner","Joystick","Microphone","Barcode Reader"],"⚙️ Proses":["CPU / Prosesor","RAM","ROM","VGA Card","Sound Card","GPU"],"🖥️ Output":["Monitor","Printer","Speaker"],"💾 Storage":["Hard Disk (HDD)","SSD","Flash Drive","Compact Disc","SD / MicroSD Card","Cloud Storage"],"🧩 Peranti Lainnya":["Motherboard","Casing","PSU (Power Supply)","LAN Card"]},
 Software:{"📜 Lisensi":["Freeware","Shareware","Adware","Commercial / Proprietary","Open Source","Closed Source"],"🖧 Sistem Operasi":["Sistem Operasi","iOS","Ubuntu (Linux)"],"📱 Aplikasi Lainnya":["Pengolah Presentasi","Pengolah Grafis","Multimedia","Browser (Layanan Internet)","Social Media"]}};
 // soal pilihan ganda: [pertanyaan, [jawaban benar, pengecoh...]]
 const CQ={
