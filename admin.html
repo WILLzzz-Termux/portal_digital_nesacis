@@ -1,453 +1,70 @@
+
 <!DOCTYPE html>
-<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0d9488"><link rel="manifest" href="manifest.json"><link rel="icon" href="favicon.png"><link rel="apple-touch-icon" href="apple-touch-icon.png">
-<title>Portal Admin · NESACIS</title><link rel="stylesheet" href="portal.css"></head>
-<body>
-<header class="top"><b>🛡 Portal Admin</b><span class="sp"></span><span class="nm" id="nm"></span><a href="panduan.html">Panduan</a><a href="index.html">Portal</a><button id="out" type="button">Keluar</button></header>
-<main>
-  <div class="tabs" id="tabs"></div>
-  <div id="view"></div>
-</main>
-<div id="mh"></div>
-<script src="config.js"></script><script src="nesacis.js"></script>
-<script>
-const S=NESACIS.wajib(['admin'],'admin');
-const $=id=>document.getElementById(id);
-const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const TABS=[['ringkasan','Ringkasan'],['guru','Akun Guru & Admin'],['murid','Akun Murid'],['siswa','Data Siswa (NISN)'],['naik','Kenaikan Kelas'],['periode','Periode'],['materi','Materi'],['imul','Impor Ulangan'],['backup','Backup & Restore'],['sistem','Sistem']];
-let TAB='ringkasan';
-const call=(a,d,o)=>NESACIS.call(a,d,o);
-const pesan=r=>NESACIS.pesan(r.error);
-
-if(S){
-  $('nm').textContent=S.user.nama;$('out').onclick=()=>NESACIS.keluar('index.html');
-  $('tabs').innerHTML=TABS.map(t=>`<button data-t="${t[0]}">${t[1]}</button>`).join('');
-  $('tabs').onclick=e=>{const b=e.target.closest('[data-t]');if(b)buka(b.dataset.t)};
-  buka('ringkasan');
-}
-function buka(t){TAB=t;document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.t===t));
-  $('view').innerHTML='<p class="empty">Memuat…</p>';({ringkasan:vRingkasan,guru:()=>vAkun('staf'),murid:()=>vAkun('murid'),siswa:vSiswa,naik:vNaik,periode:vPeriode,materi:vMateri,imul:vImul,backup:vBackup,sistem:vSistem})[t]()}
-
-/* ---------- modal ---------- */
-function modal(html,onOk,okText){
-  const m=document.createElement('div');m.className='modal';m.innerHTML=`<div><form>${html}<div class="msg err hid" id="mm"></div><div class="row" style="margin-top:14px;justify-content:flex-end"><button type="button" class="btn sec" data-c>Batal</button><button class="btn" type="submit">${okText||'Simpan'}</button></div></form></div>`;
-  $('mh').appendChild(m);const f=m.querySelector('form'),mm=m.querySelector('#mm');
-  m.querySelector('[data-c]').onclick=()=>m.remove();
-  f.onsubmit=async e=>{e.preventDefault();const b=f.querySelector('.btn[type=submit]');b.disabled=true;mm.classList.add('hid');
-    const err=await onOk(Object.fromEntries(new FormData(f).entries()),f);b.disabled=false;
-    if(err){mm.textContent=err;mm.classList.remove('hid')}else m.remove()};
-  const i=f.querySelector('input,select');if(i)i.focus();return m;
-}
-const info=(t,h)=>{const m=modal(`<h2>${esc(t)}</h2>${h}`,()=>{},'Tutup');m.querySelector('[data-c]').remove()};
-function konfirm(judul,teks,fn,kata){
-  modal(`<h2>${esc(judul)}</h2><p>${teks}</p>${kata?`<label>Ketik <b>${kata}</b> untuk melanjutkan</label><input name="k" autocomplete="off">`:''}`,async v=>{
-    if(kata&&v.k!==kata)return 'Konfirmasi tidak cocok.';return await fn()},'Ya, lanjutkan');
-}
-
-/* ---------- ringkasan ---------- */
-async function vRingkasan(){
-  const r=await call('ad_ringkasan');if(!r.ok)return $('view').innerHTML=`<div class="msg err">${esc(pesan(r))}</div>`;
-  const c=[['Guru',r.guru],['Murid terdaftar',r.murid],['Admin',r.admin],['Siswa di data sekolah',r.siswa],['Periode',r.periode],['Ulangan',r.ulangan],['Hasil ulangan',r.hasil],['Materi',r.materi]];
-  const nm={akun:'Akun',jurnal:'Jurnal',nilai:'Nilai',absensi:'Absensi',ulangan:'Ulangan',materi:'Materi'};
-  const peringatan=(r.fungsiHilang&&r.fungsiHilang.length)?`<div class="msg err"><b>File backend belum lengkap.</b> Fungsi tidak ditemukan: ${esc(r.fungsiHilang.join(', '))}. Tempel ulang SEMUA file .gs dari paket terbaru (terutama yang memuat fungsi itu), simpan, lalu buat versi deployment baru. Setelah itu fitur terkait akan berfungsi.</div>`:'';
-  $('view').innerHTML=`${peringatan}<h1>Ringkasan</h1><div class="grid">${c.map(x=>`<div class="tile" style="cursor:default"><span>${x[0]}</span><div class="stat">${x[1]}</div></div>`).join('')}</div>
-  <div class="card" style="margin-top:14px"><h2>6 file database</h2><p class="mut" style="margin:0 0 6px">Versi backend: <b>${esc(r.versi||'-')}</b></p><p class="mut">Semua data tersimpan di spreadsheet berikut (dibuka lewat akun pemilik skrip). Jangan ubah isinya manual saat aplikasi dipakai.</p>
-  <div class="row">${Object.keys(r.urls).map(k=>`<a class="btn sec sm" href="${esc(r.urls[k])}" target="_blank" rel="noopener">${nm[k]} ↗</a>`).join('')}</div></div>`;
-}
-
-/* ---------- akun ---------- */
-
-/* ---------- daftar dengan filter, urutan, dan halaman ---------- */
-const alamiah=(a,b)=>String(a).localeCompare(String(b),'id',{numeric:true,sensitivity:'base'});
-const tingkatDari=k=>{const c=String(k||'').charAt(0);return '789'.includes(c)&&c?c:''};
-const opsiHtml=(arr,sel)=>arr.map(([v,l])=>`<option value="${esc(v)}" ${String(v)===String(sel)?'selected':''}>${esc(l)}</option>`).join('');
-const unik=(arr,f)=>[...new Set(arr.map(f).filter(Boolean))].sort(alamiah);
-function buatDaftar(c){
-  /* c: items(), cari(item), saring:[{id,label,opsi(all,F)->[[v,l]],cocok(item,v)}], urut:{key:[label,cmp]}, kepala, kolom, baris(item), kosong, placeholder, satuan */
-  const F={q:'',page:1,size:50,urut:Object.keys(c.urut)[0]};c.saring.forEach(x=>F[x.id]='');
-  const norm=t=>String(t==null?'':t).toLowerCase();
-  const aktifJml=()=>c.saring.filter(x=>F[x.id]).length+(F.q.trim()?1:0);
-  function bar(){
-    const all=c.items();
-    const sel=c.saring.map(x=>{const o=[['','Semua']].concat(x.opsi(all,F));if(!o.some(y=>String(y[0])===F[x.id]))F[x.id]='';
-      return `<div><label>${x.label}</label><select data-f="${x.id}">${opsiHtml(o,F[x.id])}</select></div>`}).join('');
-    $('fbar').innerHTML=`<div class="fgrid"><div style="grid-column:span 2"><label>Cari</label><input data-q placeholder="${esc(c.placeholder)}" value="${esc(F.q)}" autocomplete="off"></div>${sel}
-      <div><label>Urutkan</label><select data-u>${opsiHtml(Object.keys(c.urut).map(k=>[k,c.urut[k][0]]),F.urut)}</select></div>
-      <div><label>Per halaman</label><select data-s>${opsiHtml([25,50,100,200].map(n=>[n,n]),F.size)}</select></div>
-      <div><button class="btn sec" data-reset ${aktifJml()?'':'disabled'}>Reset filter${aktifJml()?' ('+aktifJml()+')':''}</button></div></div>`;
-  }
-  function render(){
-    const all=c.items(),q=norm(F.q).split(/\s+/).filter(Boolean);
-    const L=all.filter(it=>{if(q.length){const h=norm(c.cari(it));if(!q.every(t=>h.includes(t)))return false}return c.saring.every(x=>!F[x.id]||x.cocok(it,F[x.id]))});
-    L.sort(c.urut[F.urut][1]);
-    const hal=Math.max(1,Math.ceil(L.length/F.size));if(F.page>hal)F.page=hal;
-    const a=(F.page-1)*F.size,b=Math.min(L.length,a+F.size);
-    $('t').innerHTML=c.kepala+'<tbody>'+(L.length?L.slice(a,b).map(c.baris).join(''):`<tr><td colspan="${c.kolom}" class="empty">${aktifJml()?'Tidak ada '+c.satuan+' yang cocok dengan filter.':c.kosong}</td></tr>`)+'</tbody>';
-    $('fsum').innerHTML=L.length?`Menampilkan <b>${a+1}–${b}</b> dari <b>${L.length}</b> ${c.satuan}${L.length!==all.length?` (total ${all.length})`:''}`:`0 ${c.satuan} dari total ${all.length}`;
-    const pg=`<div class="pg"><button class="btn sec sm" data-p="1" ${F.page<=1?'disabled':''}>«</button><button class="btn sec sm" data-p="${F.page-1}" ${F.page<=1?'disabled':''}>‹ Sebelumnya</button><span class="mut">Hal. ${F.page} / ${hal}</span><button class="btn sec sm" data-p="${F.page+1}" ${F.page>=hal?'disabled':''}>Berikutnya ›</button><button class="btn sec sm" data-p="${hal}" ${F.page>=hal?'disabled':''}>»</button></div>`;
-    $('fpg').innerHTML=pg;$('fpg2').innerHTML=hal>1?pg:'';
-  }
-  const host=$('lst');
-  host.onchange=e=>{const t=e.target;
-    if(t.dataset.f){F[t.dataset.f]=t.value;F.page=1;bar();render()}
-    else if(t.dataset.u!==undefined){F.urut=t.value;F.page=1;render()}
-    else if(t.dataset.s!==undefined){F.size=Number(t.value);F.page=1;render()}};
-  host.oninput=e=>{if(e.target.dataset.q!==undefined){F.q=e.target.value;F.page=1;render();const r=host.querySelector('[data-reset]');if(r){r.disabled=!aktifJml();r.textContent='Reset filter'+(aktifJml()?' ('+aktifJml()+')':'')}}};
-  host.onclick=e=>{const b=e.target.closest('[data-p],[data-reset]');if(!b||b.disabled)return;
-    if(b.dataset.reset!==undefined){F.q='';c.saring.forEach(x=>F[x.id]='');F.page=1;bar();render()}
-    else{F.page=Number(b.dataset.p);render();$('t').parentNode.scrollTop=0}};
-  bar();render();
-  return {segarkan(){bar();render()}};
-}
-const barisAtas=()=>'<div id="lst"><div class="card fbar"><div id="fbar"></div></div><div class="row" style="margin:0 0 6px"><span class="mut grow" id="fsum"></span><div id="fpg"></div></div>';
-const barisBawah='<div id="fpg2" style="margin-top:8px"></div></div>';
-
-let AK=[],LST=null;
-async function vAkun(peran){
-  const r=await call('ad_akun_list',{peran});if(!r.ok)return $('view').innerHTML=`<div class="msg err">${esc(pesan(r))}</div>`;
-  AK=r.akun;const m=peran==='murid';
-  $('view').innerHTML=`<div class="row"><h1 class="grow" style="margin:0">${m?'Akun Murid':'Akun Guru & Admin'} <span class="mut">(${AK.length})</span></h1>
-   <button class="btn" id="add">+ Tambah akun</button></div>
-   ${m?'<p class="mut">Akun murid dipakai untuk melihat <b>Hasil Belajarku</b> (login NISN). Tidak ada pendaftaran mandiri: buat akun satu per satu di sini, atau sekaligus lewat Data Siswa &gt; <b>Buat akun murid</b>. Materi dan ulangan tidak memerlukan akun.</p>':'<p class="mut">Guru tidak dapat mendaftar sendiri; akun dibuat di sini. Isi email agar guru bisa memakai fitur “Lupa password”.</p>'}
-   ${barisAtas()}<div class="tw tall"><table id="t"></table></div>${barisBawah}`;
-  const kepalaT=`<thead><tr><th>${m?'NISN':'Username'}</th><th>Nama</th><th>${m?'Kelas / Absen':'Peran / Email'}</th>${m?'':'<th>Ulangan</th>'}<th>Status</th><th></th></tr></thead>`;
-  const lst=buatDaftar({items:()=>AK,placeholder:m?'NISN, nama, kelas…':'username, nama, email…',satuan:'akun',kosong:'Belum ada akun.',kolom:m?5:6,kepala:kepalaT,
-    cari:a=>[a.username,a.nama,a.email,a.kelas,a.nisn].join(' '),
-    saring:m?[
-      {id:'tk',label:'Tingkat',opsi:()=>[['7','Kelas 7'],['8','Kelas 8'],['9','Kelas 9']],cocok:(a,v)=>tingkatDari(a.kelas)===v},
-      {id:'kl',label:'Kelas',opsi:(all,F)=>unik(all.filter(a=>!F.tk||tingkatDari(a.kelas)===F.tk),a=>a.kelas).map(k=>[k,k]),cocok:(a,v)=>a.kelas===v},
-      {id:'st',label:'Status',opsi:()=>[['aktif','Aktif'],['nonaktif','Nonaktif']],cocok:(a,v)=>v==='aktif'?a.aktif:!a.aktif},
-      {id:'ab',label:'Nomor absen',opsi:()=>[['kosong','Belum diisi'],['isi','Sudah diisi']],cocok:(a,v)=>v==='kosong'?!a.absen:!!a.absen}
-    ]:[
-      {id:'pr',label:'Peran',opsi:()=>[['guru','Guru'],['admin','Admin']],cocok:(a,v)=>a.peran===v},
-      {id:'st',label:'Status',opsi:()=>[['aktif','Aktif'],['nonaktif','Nonaktif']],cocok:(a,v)=>v==='aktif'?a.aktif:!a.aktif},
-      {id:'em',label:'Email',opsi:()=>[['kosong','Belum diisi'],['isi','Sudah diisi']],cocok:(a,v)=>v==='kosong'?!a.email:!!a.email},
-      {id:'ul',label:'Ulangan',opsi:()=>[['ada','Punya ulangan'],['nol','Belum punya']],cocok:(a,v)=>v==='ada'?a.ulangan>0:a.ulangan===0}
-    ],
-    urut:m?{kelas:['Kelas & absen',(a,b)=>(!a.kelas)-(!b.kelas)||alamiah(a.kelas,b.kelas)||(Number(a.absen)||999)-(Number(b.absen)||999)||alamiah(a.nama,b.nama)],nama:['Nama A-Z',(a,b)=>alamiah(a.nama,b.nama)],nisn:['NISN',(a,b)=>alamiah(a.username,b.username)],baru:['Terbaru dibuat',(a,b)=>b.dibuat-a.dibuat]}
-      :{nama:['Nama A-Z',(a,b)=>alamiah(a.nama,b.nama)],user:['Username',(a,b)=>alamiah(a.username,b.username)],ul:['Jumlah ulangan',(a,b)=>b.ulangan-a.ulangan],baru:['Terbaru dibuat',(a,b)=>b.dibuat-a.dibuat]},
-    baris:a=>`<tr><td>${esc(a.username)}</td><td>${esc(a.nama)}</td>
-     <td>${m?esc(a.kelas)+' / '+esc(a.absen):`<span class="badge ${a.peran==='admin'?'run':''}">${a.peran}</span> ${esc(a.email)}`}</td>${m?'':`<td>${a.ulangan}</td>`}
-     <td><span class="badge ${a.aktif?'ok':'bad'}">${a.aktif?'Aktif':'Nonaktif'}</span></td>
-     <td style="white-space:nowrap"><button class="btn sm sec" data-a="ubah" data-u="${esc(a.username)}">Ubah</button> <button class="btn sm sec" data-a="reset" data-u="${esc(a.username)}">Reset sandi</button>
-     ${a.username===S.user.username?'':`<button class="btn sm sec" data-a="aktif" data-u="${esc(a.username)}">${a.aktif?'Nonaktifkan':'Aktifkan'}</button> <button class="btn sm bad" data-a="hapus" data-u="${esc(a.username)}">Hapus</button>`}</td></tr>`});
-  LST=lst;
-
-  $('add').onclick=()=>formAkun(null,peran);
-  $('t').onclick=e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=AK.find(x=>x.username===b.dataset.u),k=b.dataset.a;
-    if(k==='ubah')formAkun(a,peran);
-    if(k==='reset')modal(`<h2>Reset password ${esc(a.username)}</h2><label>Password baru (min. 6 karakter)</label><input name="pw" autocomplete="off" minlength="6" required>`,async v=>{const r=await call('ad_akun_reset',{username:a.username,password:v.pw});if(!r.ok)return pesan(r)});
-    if(k==='aktif')call('ad_akun_aktif',{username:a.username,aktif:!a.aktif}).then(r=>r.ok?segarAkun(peran):info('Gagal',esc(pesan(r))));
-    if(k==='hapus')konfirm('Hapus akun '+a.username+'?',m?'Akun murid dihapus. Hasil ulangan tetap tersimpan. Murid dapat mendaftar ulang.':'Ulangan milik akun ini dipindahkan ke akun Anda. Data jurnal guru tetap tersimpan di spreadsheet.',async()=>{const r=await call('ad_akun_hapus',{username:a.username});if(!r.ok)return pesan(r);segarAkun(peran)});
-  };
-}
-async function segarAkun(peran){   // muat ulang data tetapi pertahankan filter, urutan, dan halaman
-  const r=await call('ad_akun_list',{peran});if(!r.ok)return info('Gagal',esc(pesan(r)));
-  AK=r.akun;const h=document.querySelector('h1 .mut');if(h)h.textContent='('+AK.length+')';if(LST)LST.segarkan();
-}
-function formAkun(a,peran){
-  const m=peran==='murid',baru=!a;
-  modal(`<h2>${baru?'Tambah':'Ubah'} akun ${m?'murid':'guru/admin'}</h2>
-   <label>${m?'NISN':'Username'}</label><input name="username" value="${esc(a?a.username:'')}" ${baru?'':'readonly'} required autocomplete="off">
-   <label>Nama lengkap</label><input name="nama" value="${esc(a?a.nama:'')}" required maxlength="60">
-   ${m?`<div class="row"><div class="grow"><label>Kelas (mis. 9A)</label><input name="kelas" value="${esc(a?a.kelas:'')}" required maxlength="5"></div><div class="grow"><label>No. absen (opsional)</label><input name="absen" type="number" min="1" max="99" value="${esc(a?a.absen:'')}"></div></div>`
-     :`<label>Email (opsional, untuk lupa password)</label><input name="email" type="email" value="${esc(a?a.email:'')}">
-       <label>Peran</label><select name="peran">${['guru','admin'].map(p=>`<option ${a&&a.peran===p?'selected':''}>${p}</option>`).join('')}</select>`}
-   ${baru?'<label>Password awal (min. 6 karakter)</label><input name="password" minlength="6" required autocomplete="off">':''}`,
-  async v=>{const d=Object.assign({},v,{peran:m?'murid':v.peran});if(m)d.nisn=v.username;
-    const r=await call(baru?'ad_akun_tambah':'ad_akun_ubah',d);if(!r.ok)return pesan(r);segarAkun(peran)});
-}
-
-/* ---------- data siswa ---------- */
-async function vSiswa(){
-  $('view').innerHTML=`<h1>Data Siswa (NISN)</h1><p class="mut">Daftar resmi siswa sekolah. Dipakai untuk membuat akun murid dan sebagai sumber “Ambil dari Spreadsheet” di Jurnal Guru. Kolom <b>Guru</b> (opsional) membatasi baris itu hanya untuk guru bersangkutan (username/email, pisahkan koma).</p>
-  <div class="card"><div class="row"><button class="btn" id="imp">Impor Excel / CSV</button><button class="btn sec" id="tpl">Unduh format</button><button class="btn sec" id="jr">Tarik dari data jurnal guru</button><button class="btn" id="bam">Buat akun murid</button><button class="btn sec" id="del" style="margin-left:auto;color:var(--bad)">Hapus semua</button></div><input type="file" id="fi" accept=".xlsx,.xls,.csv" hidden><div id="sm"></div></div>
-  <div class="mut" id="jml"></div>${barisAtas()}<div class="tw tall"><table id="t"></table></div>${barisBawah}`;
-  SWL=null;$('imp').onclick=()=>$('fi').click();$('fi').onchange=impor;
-  $('tpl').onclick=async()=>{await xlsx();const ws=XLSX.utils.aoa_to_sheet([['NIS','NISN','Nama','Jenis Kelamin','Kelas','Absen','Guru'],['1234','0123456789','Contoh Siswa','L','9A','1','']]);const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Siswa');XLSX.writeFile(wb,'Format_Data_Siswa.xlsx')};
-  $('jr').onclick=()=>konfirm('Tarik dari data jurnal guru','Semua siswa yang sudah diimpor guru di periode aktif akan ditambahkan ke daftar ini (data yang sudah ada tidak ditimpa).',async()=>{const r=await call('ad_siswa_dari_jurnal',{},{timeout:120000});if(!r.ok)return pesan(r);$('sm').innerHTML=`<div class="msg ok">${r.baru} siswa baru, ${r.ubah} dilengkapi, dari ${r.guru} guru.</div>`;muat()});
-  $('del').onclick=()=>konfirm('Hapus semua data siswa?','Hanya daftar NISN yang dihapus. Akun murid tidak ikut terhapus.',async()=>{const r=await call('ad_siswa_hapus',{semua:true,konfirmasi:'HAPUS'});if(!r.ok)return pesan(r);muat()},'HAPUS');
-  $('bam').onclick=()=>modal(`<h2>Buat akun murid dari Data Siswa</h2><p>Akun dibuat untuk semua siswa yang belum punya akun (username = NISN). Siswa tanpa kelas yang valid dilewati.</p><label>Password awal (kosongkan = NISN masing-masing)</label><input name="pw" autocomplete="off" placeholder="min. 6 karakter, atau kosong">`,async v=>{
-    const x=await call('ad_murid_buat',{password:v.pw},{timeout:240000});if(!x.ok)return pesan(x);const l=x.lewat;
-    $('sm').innerHTML=`<div class="msg ok">${x.dibuat} akun dibuat (password awal: ${esc(x.passwordAwal)}). Dilewati: ${l.sudahAda} sudah punya akun, ${l.kelasTidakValid} kelas tidak valid, ${l.namaTidakValid} nama tidak valid, ${l.nisnTidakValid} NISN tidak valid, ${l.nisnPendek} password &lt; 6 karakter.</div>`;muat()},'Buat akun');
-  muat();
-}
-let SW=[],SWL=null;
-async function muat(){
-  const r=await call('ad_siswa_list',{});
-  if(!r.ok){$('t').innerHTML=`<tbody><tr><td class="empty">${esc(pesan(r))}</td></tr></tbody>`;return}
-  SW=r.siswa;
-  if(!SWL)SWL=buatDaftar({items:()=>SW,placeholder:'NISN, NIS, nama, kelas…',satuan:'siswa',kosong:'Belum ada data siswa. Impor dari Excel.',kolom:9,
-    kepala:`<thead><tr><th>NIS</th><th>NISN</th><th>Nama</th><th>JK</th><th>Kelas</th><th>Absen</th><th>Guru</th><th>Akun</th><th></th></tr></thead>`,
-    cari:s=>[s.nis,s.nisn,s.nama,s.kelas].join(' '),
-    saring:[
-      {id:'tk',label:'Tingkat',opsi:()=>[['7','Kelas 7'],['8','Kelas 8'],['9','Kelas 9']],cocok:(s,v)=>tingkatDari(s.kelas)===v},
-      {id:'kl',label:'Kelas',opsi:(all,F)=>unik(all.filter(s=>!F.tk||tingkatDari(s.kelas)===F.tk),s=>s.kelas).map(k=>[k,k]),cocok:(s,v)=>s.kelas===v},
-      {id:'ak',label:'Akun murid',opsi:()=>[['ada','Sudah punya akun'],['belum','Belum punya akun']],cocok:(s,v)=>v==='ada'?s.akun:!s.akun},
-      {id:'jk',label:'Jenis kelamin',opsi:()=>[['L','Laki-laki'],['P','Perempuan']],cocok:(s,v)=>String(s.jk).trim().toUpperCase().charAt(0)===v},
-      {id:'dt',label:'Kelengkapan data',opsi:()=>[['nokelas','Kelas kosong / tidak valid'],['noabsen','Nomor absen kosong'],['nonis','NIS kosong'],['nojk','Jenis kelamin kosong']],
-        cocok:(s,v)=>v==='nokelas'?!tingkatDari(s.kelas):v==='noabsen'?!s.absen:v==='nonis'?!s.nis:!String(s.jk).trim()}
-    ],
-    urut:{kelas:['Kelas & absen',(a,b)=>(!a.kelas)-(!b.kelas)||alamiah(a.kelas,b.kelas)||(Number(a.absen)||999)-(Number(b.absen)||999)||alamiah(a.nama,b.nama)],nama:['Nama A-Z',(a,b)=>alamiah(a.nama,b.nama)],nisn:['NISN',(a,b)=>alamiah(a.nisn,b.nisn)]},
-    baris:s=>`<tr><td>${esc(s.nis)}</td><td>${esc(s.nisn)}</td><td>${esc(s.nama)}</td><td>${esc(s.jk)}</td><td>${esc(s.kelas)}</td><td>${esc(s.absen)}</td><td>${esc(s.guru)}</td><td>${s.akun?'<span class="badge ok">Terdaftar</span>':'<span class="badge">Belum</span>'}</td><td><button class="btn sm bad" data-n="${esc(s.nisn)}">×</button></td></tr>`});
-  else SWL.segarkan();
-  $('jml').textContent=r.total>SW.length?'Hanya '+SW.length+' dari '+r.total+' siswa yang dimuat':'';
-  $('t').onclick=async e=>{const b=e.target.closest('[data-n]');if(!b||!confirm('Hapus siswa ini dari daftar?'))return;const x=await call('ad_siswa_hapus',{nisn:b.dataset.n});x.ok?muat():alert(pesan(x))};
-}
-let _x;const xlsx=()=>_x||(_x=new Promise((ok,no)=>{if(window.XLSX)return ok();const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';s.onload=ok;s.onerror=()=>{_x=null;no(new Error('Pustaka Excel gagal dimuat'))};document.head.appendChild(s)}));
-const AL={nis:['nis'],nisn:['nisn'],nama:['nama','nama siswa','nama lengkap'],jk:['jenis kelamin','jk','l/p','gender'],kelas:['kelas','rombel'],absen:['absen','no absen','no. absen','no'],guru:['guru','email guru']};
-async function impor(){
-  const f=$('fi').files[0];if(!f)return;$('fi').value='';
-  try{await xlsx();const wb=XLSX.read(await f.arrayBuffer(),{type:'array'}),rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:'',raw:false});
-    const pick=(o,k)=>{for(const h of Object.keys(o))if(AL[k].includes(h.trim().toLowerCase()))return String(o[h]).trim();return ''};
-    const data=rows.map(o=>({nis:pick(o,'nis'),nisn:pick(o,'nisn'),nama:pick(o,'nama'),jk:pick(o,'jk'),kelas:pick(o,'kelas'),absen:pick(o,'absen'),guru:pick(o,'guru')})).filter(x=>x.nisn&&x.nama);
-    if(!data.length)return $('sm').innerHTML='<div class="msg err">Tidak ada baris valid. Pastikan ada kolom NISN dan Nama (lihat “Unduh format”).</div>';
-    modal(`<h2>Impor ${data.length} siswa</h2><p>Terbaca <b>${data.length}</b> baris dengan NISN dan nama.</p><label>Mode</label><select name="mode"><option value="tambah">Tambah / perbarui (data lain dipertahankan)</option><option value="ganti">Ganti seluruh daftar</option></select>`,async v=>{
-      let t={baru:0,ubah:0,lewat:0};for(let i=0;i<data.length;i+=1500){const r=await call('ad_siswa_import',{rows:data.slice(i,i+1500),mode:i?'tambah':v.mode},{timeout:120000});if(!r.ok)return pesan(r);t.baru+=r.baru;t.ubah+=r.ubah;t.lewat+=r.lewat}
-      $('sm').innerHTML=`<div class="msg ok">${t.baru} baru, ${t.ubah} diperbarui, ${t.lewat} dilewati.</div>`;muat()},'Impor');
-  }catch(e){$('sm').innerHTML=`<div class="msg err">${esc(e.message)}</div>`}
-}
-
-
-/* ---------- kenaikan kelas & pergantian tahun ajaran ---------- */
-async function vNaik(){
-  const r=await call('ad_naik_kelas_info');if(!r.ok)return $('view').innerHTML=`<div class="msg err">${esc(pesan(r))}</div>`;
-  const per=await call('ad_ringkasan');
-  $('view').innerHTML=`<h1>Kenaikan Kelas &amp; Tahun Ajaran</h1>
-  <p class="mut">Pindahkan seluruh siswa ke kelas baru sekaligus. Akun murid dan Data Siswa (NISN) diperbarui bersama. Riwayat nilai, absensi, dan hasil ulangan tetap utuh karena tersimpan per periode dan per NISN. Sebelum perubahan dijalankan, file <b>Akun</b> disalin otomatis ke folder cadangan sebagai jaring pengaman.</p>
-  <div class="card"><h2>1. Atur tujuan tiap kelas</h2><p class="mut">Usulan: 7→8, 8→9, kelas 9 lulus (akun dinonaktifkan dan dihapus dari Data Siswa). Ubah sesuai kebutuhan, mis. kelas 8B menjadi 9C, atau pilih “Tetap” untuk tinggal kelas.</p>
-  <div class="tw"><table><thead><tr><th>Kelas sekarang</th><th>Akun murid</th><th>Data siswa</th><th>Menjadi</th></tr></thead><tbody>
-  ${r.kelas.length?r.kelas.map((k,i)=>`<tr><td><b>${esc(k.kelas)}</b></td><td>${k.akun}</td><td>${k.siswa}</td><td>
-    <select data-k="${esc(k.kelas)}" data-i="${i}" style="min-width:150px"><option value="__TETAP__">Tetap (tidak berubah)</option><option value="__LULUS__" ${k.usul==='__LULUS__'?'selected':''}>Lulus / keluar</option><option value="__KELAS__" ${k.usul&&k.usul!=='__LULUS__'?'selected':''}>Pindah ke kelas…</option></select>
-    <input data-t="${i}" value="${k.usul&&k.usul!=='__LULUS__'?esc(k.usul):''}" placeholder="mis. 8A" maxlength="5" style="width:90px;margin-left:6px"></td></tr>`).join(''):'<tr><td colspan="4" class="empty">Belum ada data kelas.</td></tr>'}</tbody></table></div></div>
-  <div class="card"><h2>2. Jalankan</h2>
-   <label style="display:flex;gap:8px;align-items:center;margin:0 0 8px"><input type="checkbox" id="hl" checked style="width:auto"> Hapus siswa yang lulus dari Data Siswa (NISN)</label>
-   <button class="btn" id="go">Tinjau &amp; jalankan kenaikan kelas</button><div id="nm2"></div></div>
-  <div class="card"><h2>3. Pergantian tahun ajaran / semester</h2><p class="mut">Periode aktif saat ini: <b>${esc((per.periodes.find(p=>p.aktif)||{}).label||'-')}</b>. Buat periode baru agar jurnal, absensi, dan nilai guru dimulai bersih, sementara data lama tetap bisa dibuka.</p>
-   <div class="row"><input id="pid" class="grow" placeholder="ID, mis. 2027-2028-ganjil"><input id="plb" class="grow" placeholder="Label, mis. TA 2027/2028 - Ganjil"><button class="btn" id="pb">Buat &amp; jadikan aktif</button></div><div id="pm2"></div></div>
-  <div class="card"><h2>Setelah daftar siswa baru diimpor (acak kelas / nomor absen baru)</h2><p class="mut">Samakan nama, kelas, dan nomor absen semua akun murid dengan Data Siswa (NISN) terbaru. Sangat berguna bila Anda memilih mengimpor ulang daftar siswa dari Excel alih-alih memakai tabel di atas.</p>
-   <label style="display:flex;gap:14px;flex-wrap:wrap;margin:0 0 8px"><span><input type="checkbox" id="sn" checked style="width:auto"> Nama</span><span><input type="checkbox" id="sk" checked style="width:auto"> Kelas</span><span><input type="checkbox" id="sa" checked style="width:auto"> Nomor absen</span></label>
-   <button class="btn sec" id="sy">Sinkronkan akun murid dari Data Siswa</button><div id="sm3"></div></div>`;
-  document.querySelectorAll('select[data-k]').forEach(sl=>sl.onchange=()=>{const t=document.querySelector(`input[data-t="${sl.dataset.i}"]`);t.disabled=sl.value!=='__KELAS__'});
-  document.querySelectorAll('select[data-k]').forEach(sl=>{document.querySelector(`input[data-t="${sl.dataset.i}"]`).disabled=sl.value!=='__KELAS__'});
-  $('go').onclick=()=>{
-    const peta={};let ubah=0,lulus=0,naik=0;
-    document.querySelectorAll('select[data-k]').forEach(sl=>{const k=sl.dataset.k;let t=sl.value;
-      if(t==='__KELAS__')t=document.querySelector(`input[data-t="${sl.dataset.i}"]`).value.trim().toUpperCase();
-      if(t&&t!=='__TETAP__'&&t!==k){peta[k]=t;ubah++;if(t==='__LULUS__')lulus++;else naik++}});
-    if(!ubah)return $('nm2').innerHTML='<div class="msg err">Belum ada perubahan yang dipilih.</div>';
-    const rin=Object.keys(peta).map(k=>`${esc(k)} → ${peta[k]==='__LULUS__'?'<b>Lulus</b>':esc(peta[k])}`).join('<br>');
-    konfirm('Jalankan kenaikan kelas?',`${naik} kelas dipindah dan ${lulus} kelas lulus:<br><br>${rin}<br><br>Pastikan tidak ada ulangan yang sedang berlangsung.`,async()=>{
-      const x=await call('ad_naik_kelas',{map:peta,konfirmasi:'NAIK',hapusLulus:$('hl').checked},{timeout:180000});
-      if(!x.ok)return pesan(x);
-      $('nm2').innerHTML=`<div class="msg ok">Selesai: ${x.naik} akun naik kelas, ${x.lulus} akun lulus (dinonaktifkan), ${x.siswaNaik} siswa di Data Siswa dipindah, ${x.siswaDihapus} dihapus.</div>`;vNaikRefresh()},'NAIK');
-  };
-  $('pb').onclick=async()=>{
-    const id=$('pid').value.trim(),lb=$('plb').value.trim();if(!id)return $('pm2').innerHTML='<div class="msg err">Isi ID periode.</div>';
-    const list=per.periodes.map(p=>({id:p.id,label:p.label,aktif:false}));list.push({id,label:lb||id,aktif:true});
-    const x=await call('ad_periode_simpan',{list});$('pm2').innerHTML=x.ok?`<div class="msg ok">Periode “${esc(lb||id)}” dibuat dan menjadi periode aktif. Guru akan diminta memilih periode saat membuka Jurnal.</div>`:`<div class="msg err">${esc(pesan(x))}</div>`};
-  $('sy').onclick=()=>konfirm('Sinkronkan akun murid?','Nama, kelas, dan nomor absen akun murid yang NISN-nya ada di Data Siswa akan disamakan dengan Data Siswa.',async()=>{
-    const x=await call('ad_sinkron_akun',{nama:$('sn').checked,kelas:$('sk').checked,absen:$('sa').checked});if(!x.ok)return pesan(x);
-    $('sm3').innerHTML=`<div class="msg ok">${x.cocok} akun cocok dengan Data Siswa, ${x.diubah} akun diperbarui.</div>`});
-}
-function vNaikRefresh(){setTimeout(()=>{const m=$('nm2').innerHTML;vNaik().then(()=>{$('nm2').innerHTML=m})},300)}
-
-
-/* ---------- impor data ulangan dari Excel (mis. dari aplikasi ulangan lama) ---------- */
-const IMUL={};
-const hdr=(o,...ns)=>{for(const n of ns){for(const k of Object.keys(o))if(String(k).trim().toLowerCase()===n.toLowerCase())return o[k]}return ''};
-function msTgl(v){
-  if(v===''||v==null)return 0;
-  if(v instanceof Date)return isNaN(v)?0:v.getTime();
-  if(typeof v==='number')return v>20000&&v<80000?Math.round((v-25569)*86400000):0;   // serial tanggal Excel
-  const t=Date.parse(String(v).trim().replace(' ','T'));return isNaN(t)?0:t;
-}
-const angka=v=>{const n=Number(String(v==null?'':v).replace(',','.'));return isFinite(n)&&String(v).trim()!==''?n:''};
-function bacaSheet(wb,nama){
-  const k=wb.SheetNames.find(n=>n.trim().toLowerCase()===nama.toLowerCase());if(!k)return [];
-  return XLSX.utils.sheet_to_json(wb.Sheets[k],{defval:'',raw:true});
-}
-async function vImul(){
-  $('view').innerHTML=`<h1>Impor Data Ulangan dari Excel</h1>
-  <p class="mut">Unggah berkas Excel hasil ekspor aplikasi ulangan (sheet <b>Ulangan</b>, <b>Soal</b>, dan <b>Peserta</b>). Ulangan, soal, dan hasil siswa dimasukkan ke aplikasi ini. Nama siswa dicocokkan ke <b>Data Siswa</b> (kelas + nama) agar NISN terisi dan nilai dapat ditarik ke jurnal guru. Kolom lain (mis. Kode Lama) diabaikan.</p>
-  <div class="card"><input type="file" id="imf" accept=".xlsx,.xls"><div id="imm"></div></div>
-  <div id="imp-prev"></div>
-  <div class="card"><h2>Hasil ulangan tanpa NISN</h2><p class="mut">Setelah Data Siswa dilengkapi, cocokkan ulang hasil ulangan yang belum punya NISN.</p><button class="btn sec" id="imc">Cocokkan ulang</button><div id="imcm" style="margin-top:8px"></div></div>`;
-  $('imf').onchange=imulBaca;
-  $('imc').onclick=async()=>{$('imc').disabled=true;const x=await call('ad_ul_cocokkan',{},{timeout:240000});$('imc').disabled=false;$('imcm').innerHTML=x.ok?`<div class="msg ok">${x.dicek} hasil diperiksa, ${x.cocok} berhasil dicocokkan.</div>`:`<div class="msg err">${esc(pesan(x))}</div>`};
-}
-async function imulBaca(){
-  const f=$('imf').files[0];if(!f)return;$('imm').innerHTML='<p class="mut">Membaca berkas…</p>';
-  try{
-    await xlsx();const wb=XLSX.read(await f.arrayBuffer(),{type:'array',cellDates:true});
-    const U=bacaSheet(wb,'Ulangan'),S=bacaSheet(wb,'Soal'),P=bacaSheet(wb,'Peserta');
-    if(!U.length)throw new Error('Sheet "Ulangan" tidak ditemukan atau kosong. Pastikan memilih berkas ekspor aplikasi ulangan.');
-    IMUL.ul=U.filter(r=>String(hdr(r,'Kode')).trim()).map(r=>({kode:String(hdr(r,'Kode')).trim().toUpperCase(),judul:String(hdr(r,'Judul')),pemilik:String(hdr(r,'Pemilik')).trim().toLowerCase(),durasi:angka(hdr(r,'Durasi (menit)','Durasi')),jumlah:angka(hdr(r,'Jumlah Soal (0=semua)','Jumlah Soal')),maks:angka(hdr(r,'Maks Pelanggaran')),aktif:String(hdr(r,'Dibuka')).toUpperCase(),tampil:String(hdr(r,'Tampil Nilai')).toUpperCase(),kkm:angka(hdr(r,'KKM')),kelas:String(hdr(r,'Daftar Kelas')),maxAbsen:angka(hdr(r,'Maks No Absen')),dibuat:msTgl(hdr(r,'Dibuat')),acak:String(hdr(r,'Acak Berimbang Level')).toUpperCase(),urut:String(hdr(r,'Urut Mudah-Sulit')).toUpperCase(),mapel:String(hdr(r,'Mata Pelajaran')),tingkat:String(hdr(r,'Tingkat')).replace(/\.0$/,'')}));
-    IMUL.so=S.filter(r=>String(hdr(r,'Kode')).trim()&&String(hdr(r,'Soal')).trim()).map(r=>({kode:String(hdr(r,'Kode')).trim().toUpperCase(),no:angka(hdr(r,'No')),soal:String(hdr(r,'Soal')),a:String(hdr(r,'A')),b:String(hdr(r,'B')),c:String(hdr(r,'C')),d:String(hdr(r,'D')),kunci:String(hdr(r,'Kunci')).trim().toUpperCase(),level:String(hdr(r,'Level')),gambar:String(hdr(r,'URL Gambar','Gambar'))}));
-    IMUL.pe=P.filter(r=>String(hdr(r,'Token')).trim()).map(r=>({token:String(hdr(r,'Token')),key:String(hdr(r,'Kunci Siswa')),kode:String(hdr(r,'Kode')).trim().toUpperCase(),nama:String(hdr(r,'Nama')),kelas:String(hdr(r,'Kelas')),absen:String(hdr(r,'Absen')).replace(/\.0$/,''),status:String(hdr(r,'Status')),mulai:msTgl(hdr(r,'Mulai')),ids:String(hdr(r,'Soal Terpilih')),selesai:msTgl(hdr(r,'Selesai')),aktif:msTgl(hdr(r,'Aktivitas Terakhir')),terjawab:angka(hdr(r,'Terjawab')),no:angka(hdr(r,'Soal Saat Ini')),pelanggaran:angka(hdr(r,'Pelanggaran')),log:String(hdr(r,'Log Pelanggaran')),jawaban:String(hdr(r,'Jawaban')),benar:angka(hdr(r,'Benar')),salah:angka(hdr(r,'Salah')),kosong:angka(hdr(r,'Kosong')),nilai:angka(hdr(r,'Nilai')),durasi:angka(hdr(r,'Durasi (menit)')),alasan:String(hdr(r,'Alasan Selesai'))}));
-    const [cek,ak]=await Promise.all([call('ad_ul_impor_cek',{kodes:IMUL.ul.map(u=>u.kode)}),call('ad_akun_list',{peran:'staf'})]);
-    if(!cek.ok)throw new Error(pesan(cek));if(!ak.ok)throw new Error(pesan(ak));
-    const staf=ak.akun.filter(a=>a.aktif).map(a=>a.username),pemilik=[...new Set(IMUL.ul.map(u=>u.pemilik))];
-    const nSoal=k=>IMUL.so.filter(s=>s.kode===k).length,nPes=k=>IMUL.pe.filter(p=>p.kode===k&&p.status==='SELESAI').length;
-    $('imm').innerHTML='';
-    $('imp-prev').innerHTML=`<div class="card"><h2>Pratinjau</h2>
-      <div class="tw"><table><thead><tr><th>Kode</th><th>Judul</th><th>Mapel / Kelas</th><th>Soal</th><th>Hasil siswa</th><th>Status</th></tr></thead><tbody>${IMUL.ul.map(u=>`<tr><td><b>${esc(u.kode)}</b></td><td>${esc(u.judul)}</td><td>${esc(u.mapel)} · ${esc(u.tingkat)}</td><td>${nSoal(u.kode)}</td><td>${nPes(u.kode)}</td><td>${cek.ada.includes(u.kode)?'<span class="badge bad">Sudah ada</span>':'<span class="badge ok">Baru</span>'}</td></tr>`).join('')}</tbody></table></div>
-      <h2 style="margin-top:14px">Pemilik ulangan</h2><p class="mut">Pilih akun guru yang akan memiliki ulangan ini di aplikasi baru.</p>
-      ${pemilik.map(p=>`<div class="row" style="margin-bottom:6px"><span style="min-width:170px">${esc(p||'(kosong)')} →</span><select data-pm="${esc(p)}">${staf.map(s=>`<option ${s===p?'selected':''}>${esc(s)}</option>`).join('')}</select></div>`).join('')}
-      <label style="display:flex;gap:8px;align-items:center;margin:10px 0 4px"><input type="checkbox" id="im-pes" checked style="width:auto"> Impor juga hasil siswa (${IMUL.pe.filter(p=>p.status!=='RESET').length} baris)</label>
-      <label style="display:flex;gap:8px;align-items:center;margin:4px 0 12px"><input type="checkbox" id="im-timpa" style="width:auto"> Timpa ulangan yang kodenya sudah ada (soal dan hasil lamanya dihapus)</label>
-      <button class="btn" id="im-go">Impor sekarang</button><div class="card" id="im-pg" hidden style="margin-top:12px"><div class="bar"><i id="im-pb" style="width:0"></i></div><p class="mut" id="im-pt"></p></div><div id="im-hasil"></div></div>`;
-    $('im-go').onclick=imulJalan;
-  }catch(e){$('imm').innerHTML=`<div class="msg err">${esc(e.message||e)}</div>`;$('imp-prev').innerHTML=''}
-}
-async function imulJalan(){
-  const b=$('im-go');b.disabled=true;$('im-pg').hidden=false;
-  const prog=(p,t)=>{$('im-pb').style.width=Math.round(p*100)+'%';$('im-pt').textContent=t};
-  try{
-    const pemilik={};document.querySelectorAll('[data-pm]').forEach(s=>{pemilik[s.dataset.pm]=s.value});
-    prog(.02,'Mengimpor ulangan…');
-    const r1=await call('ad_ul_impor',{tahap:'ulangan',rows:IMUL.ul,pemilik,timpa:$('im-timpa').checked},{timeout:120000});if(!r1.ok)throw new Error(pesan(r1));
-    const kodes=r1.diimpor;let so=0,pes={ditulis:0,cocok:0,tanpaNisn:0,ganda:0},tak=[];
-    const rs=IMUL.so.filter(s=>kodes.includes(s.kode)),rp=$('im-pes').checked?IMUL.pe.filter(p=>kodes.includes(p.kode)):[];
-    const total=rs.length+rp.length||1;let sudah=0;
-    for(let i=0;i<rs.length;i+=120){const x=await call('ad_ul_impor',{tahap:'soal',rows:rs.slice(i,i+120),kodes},{timeout:120000});if(!x.ok)throw new Error(pesan(x));so+=x.ditulis;sudah+=Math.min(120,rs.length-i);prog(.05+.9*sudah/total,`Mengimpor soal… ${so}`)}
-    for(let i=0;i<rp.length;i+=80){const x=await call('ad_ul_impor',{tahap:'peserta',rows:rp.slice(i,i+80),kodes},{timeout:120000});if(!x.ok)throw new Error(pesan(x));['ditulis','cocok','tanpaNisn','ganda'].forEach(k=>pes[k]+=x[k]);tak=tak.concat(x.contohTakCocok||[]);sudah+=Math.min(80,rp.length-i);prog(.05+.9*sudah/total,`Mengimpor hasil siswa… ${pes.ditulis}`)}
-    await call('ad_ul_impor',{tahap:'selesai',rows:[],kodes},{timeout:120000});prog(1,'Selesai.');
-    $('im-hasil').innerHTML=`<div class="msg ok"><b>${kodes.length}</b> ulangan, <b>${so}</b> soal, dan <b>${pes.ditulis}</b> hasil siswa diimpor.${r1.dilewati.length?'<br>Dilewati: '+esc(r1.dilewati.join(', ')):''}${pes.ganda?'<br>'+pes.ganda+' hasil dilewati karena sudah ada.':''}</div>
-      ${pes.ditulis?`<div class="msg ${pes.tanpaNisn?'err':'ok'}">NISN terisi otomatis untuk <b>${pes.cocok}</b> dari ${pes.ditulis} hasil (${Math.round(pes.cocok/pes.ditulis*100)}%).${pes.tanpaNisn?`<br>${pes.tanpaNisn} hasil belum cocok dengan Data Siswa (nama berbeda atau belum ada di daftar), contoh: ${esc(tak.slice(0,8).join('; '))}. Lengkapi/perbaiki Data Siswa lalu klik <b>Cocokkan ulang</b>.`:''}</div>`:''}
-      <p class="mut">Ulangan yang diimpor berstatus <b>sesuai file</b>. Atur buka/tutup lewat saklar di kartu ulangan.</p>`;
-  }catch(e){$('im-pt').textContent='Gagal: '+(e.message||e);$('im-hasil').innerHTML=`<div class="msg err">${esc(e.message||e)}</div>`}
-  finally{b.disabled=false}
-}
-
-/* ---------- periode ---------- */
-async function vPeriode(){
-  const r=await call('ad_ringkasan');if(!r.ok)return $('view').innerHTML=`<div class="msg err">${esc(pesan(r))}</div>`;
-  let L=r.periodes.map(p=>Object.assign({},p));
-  const draw=()=>{$('view').innerHTML=`<h1>Periode (Tahun Ajaran / Semester)</h1><p class="mut">Data jurnal, absensi, dan nilai guru disimpan terpisah per periode. Periode bertanda aktif menjadi pilihan awal. Menghapus periode dari daftar tidak menghapus datanya di spreadsheet.</p>
-   <div class="card">${L.map((p,i)=>`<div class="row" style="margin-bottom:8px"><input class="grow" data-f="id" data-i="${i}" value="${esc(p.id)}" placeholder="ID, mis. 2026-2027-ganjil"><input class="grow" data-f="label" data-i="${i}" value="${esc(p.label)}" placeholder="Label tampilan"><label style="margin:0;display:flex;gap:5px;align-items:center"><input type="radio" name="ak" style="width:auto" data-i="${i}" ${p.aktif?'checked':''}>Aktif</label><button class="btn sm bad" data-d="${i}">×</button></div>`).join('')}
-   <div class="row"><button class="btn sec" id="ad">+ Tambah periode</button><button class="btn" id="sv">Simpan</button></div><div id="pm"></div></div>`;
-   $('view').querySelectorAll('input[data-f]').forEach(x=>x.oninput=()=>L[x.dataset.i][x.dataset.f]=x.value);
-   $('view').querySelectorAll('input[type=radio]').forEach(x=>x.onchange=()=>L.forEach((p,i)=>p.aktif=i==x.dataset.i));
-   $('view').querySelectorAll('[data-d]').forEach(x=>x.onclick=()=>{L.splice(x.dataset.d,1);draw()});
-   $('ad').onclick=()=>{L.push({id:'',label:'',aktif:false});draw()};
-   $('sv').onclick=async()=>{const r=await call('ad_periode_simpan',{list:L});$('pm').innerHTML=r.ok?'<div class="msg ok">Tersimpan.</div>':`<div class="msg err">${esc(pesan(r))}</div>`;if(r.ok)L=r.periodes}};
-  draw();
-}
-
-/* ---------- materi ---------- */
-async function vMateri(){
-  const r=await call('materi_list',{});if(!r.ok)return $('view').innerHTML=`<div class="msg err">${esc(pesan(r))}</div>`;
-  $('view').innerHTML=`<h1>Materi Pembelajaran <span class="mut">(${r.materi.length})</span></h1><p class="mut">Guru mengunggah materi dari menu Materi Pembelajaran di Jurnal Guru. Di sini admin dapat memantau dan menghapus.</p><div class="tw"><table><thead><tr><th>Judul</th><th>Mapel</th><th>Kelas</th><th>Guru</th><th>Berkas</th><th></th></tr></thead><tbody>${r.materi.length?r.materi.map(m=>`<tr><td>${esc(m.judul)}</td><td>${esc(m.mapel)}</td><td>${m.tingkat||'Semua'}</td><td>${esc(m.guru)}</td><td>${m.tipe.toUpperCase()} · ${m.ukuranKB} KB</td><td><button class="btn sm bad" data-h="${esc(m.id)}">Hapus</button></td></tr>`).join(''):'<tr><td colspan="6" class="empty">Belum ada materi.</td></tr>'}</tbody></table></div>`;
-  $('view').onclick=e=>{const b=e.target.closest('[data-h]');if(b)konfirm('Hapus materi?','Materi dan berkasnya dihapus.',async()=>{const x=await call('materi_hapus',{id:b.dataset.h});if(!x.ok)return pesan(x);vMateri()})};
-}
-
-/* ---------- backup & restore ---------- */
-function vBackup(){
-  $('view').innerHTML=`<h1>Backup &amp; Restore</h1>
-  <div id="cad"></div>
-  <div class="card"><h2>Unduh backup lengkap</h2><p class="mut">Seluruh isi 6 database (akun, jurnal, nilai, absensi, ulangan, materi) menjadi satu file .json. <b>File ini berisi data pribadi dan password terenkripsi — simpan dengan aman.</b></p>
-   <label style="display:flex;gap:8px;align-items:center;margin:8px 0"><input type="checkbox" id="bf" checked style="width:auto"> Sertakan berkas materi (PDF/HTML) — file backup lebih besar</label>
-   <button class="btn" id="bk">Mulai backup</button></div>
-  <div class="card"><h2>Pulihkan dari backup</h2><p class="mut">Isi database akan <b>diganti</b> dengan isi file backup. Akun yang sedang Anda pakai tetap aman.</p>
-   <input type="file" id="rf" accept=".json,application/json"><div style="margin-top:10px"><button class="btn bad" id="rs">Pulihkan</button></div></div>
-  <div class="card" id="pg" hidden><div class="bar"><i id="pb" style="width:0"></i></div><p class="mut" id="pt"></p></div>`;
-  $('bk').onclick=backup;$('rs').onclick=restore;vCadangan();
-}
-
-async function vCadangan(){
-  const r=await call('ad_cadangan_info');if(!r.ok)return $('cad').innerHTML=`<div class="card"><div class="msg err">${esc(pesan(r))}</div></div>`;
-  const c=r.conf,H=['Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'];
-  $('cad').innerHTML=`<div class="card"><h2>Cadangan otomatis</h2>
-   <p class="mut">Menyalin 6 spreadsheet database ke folder Google Drive sesuai jadwal. Cadangan tertua dihapus otomatis bila melebihi batas simpan. Zona waktu jadwal: <b>${esc(r.zona)}</b> (ubah di Setelan Proyek Apps Script bila keliru).</p>
-   <label style="display:flex;gap:8px;align-items:center;margin:0 0 6px"><input type="checkbox" id="ca" style="width:auto" ${c.aktif?'checked':''}> Aktifkan cadangan otomatis</label>
-   <div class="row"><div><label>Frekuensi</label><select id="cf"><option value="harian" ${c.frek==='harian'?'selected':''}>Setiap hari</option><option value="mingguan" ${c.frek==='mingguan'?'selected':''}>Setiap minggu</option></select></div>
-    <div id="chw" ${c.frek==='mingguan'?'':'class="hid"'}><label>Hari</label><select id="ch">${H.map((h,i)=>`<option value="${i+1}" ${c.hari===i+1?'selected':''}>${h}</option>`).join('')}</select></div>
-    <div><label>Jam</label><select id="cj">${[...Array(24).keys()].map(j=>`<option value="${j}" ${c.jam===j?'selected':''}>${String(j).padStart(2,'0')}</option>`).join('')}</select></div>
-    <div><label>Menit (±15)</label><select id="cm">${[0,15,30,45].map(m=>`<option value="${m}" ${c.menit===m?'selected':''}>${String(m).padStart(2,'0')}</option>`).join('')}</select></div>
-    <div><label>Simpan terakhir</label><input id="cs" type="number" min="1" max="60" value="${c.simpan}" style="width:90px"> <span class="mut">cadangan</span></div></div>
-   <div class="row" style="margin-top:12px"><button class="btn" id="csv">Simpan jadwal</button><button class="btn sec" id="cnow">Cadangkan sekarang</button><a class="btn sec" href="${esc(r.folderUrl)}" target="_blank" rel="noopener">Buka folder cadangan ↗</a></div>
-   <p class="mut" style="margin-top:10px">Status: ${c.aktif?(r.trigger?'<span class="badge ok">Jadwal aktif</span>':'<span class="badge bad">Jadwal belum terpasang — klik Simpan jadwal</span>'):'<span class="badge">Nonaktif</span>'} · Terakhir: ${c.terakhir?new Date(c.terakhir).toLocaleString('id-ID'):'belum pernah'} (${esc(c.status)})</p><div id="cmsg"></div>
-   <h2 style="margin-top:14px">Daftar cadangan (${r.daftar.length})</h2>
-   <div class="tw"><table><tbody>${r.daftar.length?r.daftar.map(d=>`<tr><td>${esc(d.nama)}</td><td>${new Date(d.dibuat).toLocaleString('id-ID')}</td><td style="white-space:nowrap"><a class="btn sm sec" href="${esc(d.url)}" target="_blank" rel="noopener">Buka</a> <button class="btn sm bad" data-pulih="${esc(d.id)}">Pulihkan…</button></td></tr>`).join(''):'<tr><td class="empty">Belum ada cadangan.</td></tr>'}</tbody></table></div></div>`;
-  $('cf').onchange=()=>$('chw').classList.toggle('hid',$('cf').value!=='mingguan');
-  $('csv').onclick=async()=>{const x=await call('ad_cadangan_simpan',{aktif:$('ca').checked,frek:$('cf').value,hari:$('ch').value,jam:$('cj').value,menit:$('cm').value,simpan:$('cs').value});
-    $('cmsg').innerHTML=x.ok?'<div class="msg ok">Jadwal tersimpan.</div>':`<div class="msg err">${esc(pesan(x))}</div>`;if(x.ok)vCadangan()};
-  $('cnow').onclick=async()=>{const b=$('cnow');b.disabled=true;b.textContent='Menyalin…';const x=await call('ad_cadangan_jalankan',{},{timeout:240000});b.disabled=false;b.textContent='Cadangkan sekarang';
-    if(x.ok)vCadangan();else $('cmsg').innerHTML=`<div class="msg err">${esc(pesan(x))}</div>`};
-  $('cad').querySelectorAll('[data-pulih]').forEach(b=>b.onclick=()=>konfirm('Pulihkan dari cadangan ini?','<b>Seluruh isi 6 database akan diganti</b> dengan isi cadangan tersebut. Sebaiknya buat cadangan terbaru dulu (tombol “Cadangkan sekarang”).',async()=>{
-    for(const f of ['akun','jurnal','nilai','absensi','ulangan','materi']){prog(['akun','jurnal','nilai','absensi','ulangan','materi'].indexOf(f)/6,'Memulihkan '+f+'…');
-      const x=await call('ad_cadangan_pulih',{folderId:b.dataset.pulih,file:f},{timeout:300000});if(!x.ok){prog(0,'Gagal pada '+f+': '+pesan(x));return pesan(x)}}
-    prog(1,'Pemulihan dari cadangan selesai.')},'PULIHKAN'));
-}
-const prog=(p,t)=>{$('pg').hidden=false;$('pb').style.width=Math.round(p*100)+'%';$('pt').textContent=t};
-async function backup(){
-  const b=$('bk');b.disabled=true;
-  try{
-    const inf=await call('ad_backup_info');if(!inf.ok)throw new Error(pesan(inf));
-    const out={app:'NESACIS',versi:1,dibuat:new Date().toISOString(),sheets:[],berkas:{}};
-    const total=inf.sheets.reduce((a,s)=>a+s.baris,0)||1;let done=0;
-    for(const s of inf.sheets){
-      const e={file:s.file,sheet:s.sheet,headers:[],rows:[]};let dari=0;
-      for(;;){const r=await call('ad_backup_sheet',{file:s.file,sheet:s.sheet,dari,jumlah:s.sheet==='Data'?3:300},{timeout:120000});if(!r.ok)throw new Error(pesan(r));
-        e.headers=r.headers;e.rows.push(...r.rows);dari=r.next;done+=r.rows.length;prog(done/total*(.8),`Membaca ${s.file}/${s.sheet}… ${dari}/${r.total}`);if(r.selesai)break}
-      out.sheets.push(e);
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login Admin NESACIS</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #eef2f7;
+      font-family: Arial, sans-serif;
     }
-    if($('bf').checked){const m=out.sheets.find(s=>s.file==='materi'),n=m?m.rows.length:0;
-      for(let i=0;i<n;i++){const id=m.rows[i][0];prog(.8+.2*i/n,`Mengambil berkas materi ${i+1}/${n}…`);const r=await call('materi_ambil',{id},{timeout:120000});if(r.ok)out.berkas[id]=r.data}}
-    prog(1,'Selesai. Mengunduh file…');
-    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(out)],{type:'application/json'}));a.download='Backup_NESACIS_'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();
-  }catch(e){prog(0,'Gagal: '+e.message)}finally{b.disabled=false}
-}
-async function restore(){
-  const f=$('rf').files[0];if(!f)return alert('Pilih file backup (.json) dulu.');
-  let d;try{d=JSON.parse(await f.text());if(d.app!=='NESACIS'||!Array.isArray(d.sheets))throw 0}catch(e){return alert('File bukan backup NESACIS yang valid.')}
-  konfirm('Pulihkan database?',`File berisi ${d.sheets.length} sheet (dibuat ${esc(d.dibuat||'-')}). <b>Seluruh isi database saat ini akan diganti.</b> Sebaiknya unduh backup terbaru dulu.`,async()=>{
-    $('rs').disabled=true;
-    try{
-      const total=d.sheets.length+Object.keys(d.berkas||{}).length;let n=0;
-      for(const s of d.sheets){
-        prog(n/total,`Memulihkan ${s.file}/${s.sheet}…`);
-        let i=0,first=true;
-        do{let sz=0,j=i;while(j<s.rows.length&&(j===i||sz<1500000)){sz+=JSON.stringify(s.rows[j]).length;j++}
-          const r=await call('ad_restore_sheet',{file:s.file,sheet:s.sheet,rows:s.rows.slice(i,j),first,last:j>=s.rows.length},{timeout:180000});
-          if(!r.ok)throw new Error(s.file+'/'+s.sheet+': '+pesan(r));first=false;i=j}while(i<s.rows.length);
-        n++;
-      }
-      for(const id of Object.keys(d.berkas||{})){prog(n/total,'Memulihkan berkas materi…');const r=await call('ad_restore_materi',{id,data:d.berkas[id]},{timeout:180000});if(!r.ok)throw new Error(pesan(r));n++}
-      prog(1,'Pemulihan selesai. Muat ulang halaman jika data belum tampil.');
-    }catch(e){prog(0,'Gagal: '+e.message);return e.message}finally{$('rs').disabled=false}
-  },'PULIHKAN');
-}
+    .login {
+      width: min(360px, 92vw);
+      padding: 28px;
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 8px 30px #0001;
+    }
+    h2 { margin-top: 0; }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin: 8px 0;
+      border-radius: 8px;
+      font-size: 15px;
+    }
+    input { border: 1px solid #ccd3df; }
+    button {
+      border: 0;
+      color: white;
+      background: #2563eb;
+      cursor: pointer;
+    }
+    #error { color: #dc2626; }
+  </style>
+</head>
+<body>
+  <form class="login" onsubmit="login(event)">
+    <h2>Admin NESACIS</h2>
+    <input id="username" placeholder="Username" autocomplete="username" required>
+    <input id="password" type="password" placeholder="Password"
+      autocomplete="current-password" required>
+    <button type="submit">Login</button>
+    <p id="error"></p>
+  </form>
 
-/* ---------- sistem ---------- */
-async function vSistem(){
-  const r=await call('ad_ringkasan');if(!r.ok)return $('view').innerHTML=`<div class="msg err">${esc(pesan(r))}</div>`;
-  $('view').innerHTML=`<h1>Sistem</h1>
-  <div class="card"><h2>Bobot nilai akhir &amp; ketuntasan</h2>
-   <p class="mut">Nilai Akhir murid = rata-rata nilai mata pelajaran, tiap mata pelajaran dihitung dari bobot kategori di bawah (Kehadiran = persentase hadir pada mata pelajaran itu). Hasil ulangan online masuk lewat kolom Ulangan (guru menariknya di Input Nilai). Guru dapat memakai bobot kategori sendiri di pengaturan Jurnal. Kategori tanpa nilai dilewati dan bobotnya dibagi proporsional.</p>
-   <div class="fgrid" id="bw"></div><p class="mut" id="bw-total" style="margin:8px 0"></p>
-   <div class="fgrid"><div><label>Batas ketuntasan (tidak ditampilkan ke murid)</label><input id="bw-kkm" type="number" min="1" max="100"></div></div>
-   <label style="display:flex;gap:8px;align-items:center;margin:10px 0 0"><input type="checkbox" id="bw-izin" style="width:auto"> Izin dan sakit dihitung sebagai hadir (untuk persentase kehadiran)</label>
-   <div class="row" style="margin-top:12px"><button class="btn" id="bw-simpan">Simpan bobot</button></div><div id="bw-msg"></div></div>
-  <div class="card"><h2>Ubah password saya</h2><div class="row"><input id="p1" type="password" placeholder="Password lama" class="grow"><input id="p2" type="password" placeholder="Password baru (min. 6)" class="grow"><button class="btn" id="pw">Simpan</button></div><div id="pm"></div></div>
-  <div class="card"><h2>Rekap Hasil Belajar murid</h2><p class="mut">Rekap diperbarui otomatis setiap guru menyimpan, sehingga halaman Hasil Belajarku cepat. Bangun ulang rekap bila Anda baru memulihkan backup lama atau memindahkan data dari aplikasi sebelumnya.</p>
-   <div class="row"><select id="rp" class="grow"></select><button class="btn" id="rb">Bangun ulang rekap periode ini</button></div><div id="rm"></div></div>
-  <div class="card"><h2>Kosongkan data ulangan</h2><p class="mut">Menghapus semua peserta &amp; hasil ulangan (atau juga semua ulangan &amp; soal). Tidak bisa dibatalkan — lakukan backup dulu.</p>
-   <div class="row"><button class="btn bad" id="k1">Kosongkan peserta &amp; hasil</button><button class="btn bad" id="k2">Kosongkan semua ulangan &amp; soal</button></div></div>`;
-  const bwr=await call('ad_bobot_info');
-  if(bwr.ok){const K=['Ulangan','Tugas','Keaktifan','Sikap','Kehadiran'];
-    $('bw').innerHTML=K.map(k=>`<div><label>${k} (%)</label><input type="number" min="0" max="100" data-bw="${k}" value="${bwr.kategori[k]}"></div>`).join('');
-    $('bw-kkm').value=bwr.kkm;$('bw-izin').checked=!!bwr.izinHadir;
-    const tot=()=>{const t=K.reduce((s,k)=>s+(Number(document.querySelector(`[data-bw=${k}]`).value)||0),0);$('bw-total').innerHTML='Total bobot kategori: <b>'+t+'%</b> '+(t===100?'✓':'(harus 100%)');return t};
-    tot();$('bw').oninput=tot;
-    $('bw-simpan').onclick=async()=>{const kat={};K.forEach(k=>kat[k]=Number(document.querySelector(`[data-bw=${k}]`).value)||0);
-      const x=await call('ad_bobot_simpan',{kategori:kat,kkm:Number($('bw-kkm').value),izinHadir:$('bw-izin').checked});
-      $('bw-msg').innerHTML=x.ok?'<div class="msg ok">Bobot disimpan. Hasil Belajarku memakai nilai ini (cache hingga 30 detik).</div>':`<div class="msg err">${esc(pesan(x))}</div>`}}
-  $('rp').innerHTML=r.periodes.map(p=>`<option value="${esc(p.id)}" ${p.aktif?'selected':''}>${esc(p.label)}</option>`).join('');
-  $('rb').onclick=async()=>{const b=$('rb');b.disabled=true;const x=await call('ad_rekap_bangun',{periode:$('rp').value},{timeout:240000});b.disabled=false;$('rm').innerHTML=x.ok?`<div class="msg ok">Selesai: ${x.guru} guru, ${x.murid} murid.</div>`:`<div class="msg err">${esc(pesan(x))}</div>`};
-  $('pw').onclick=async()=>{const x=await call('changePassword',{oldPassword:$('p1').value,newPassword:$('p2').value});$('pm').innerHTML=x.ok?'<div class="msg ok">Password diganti.</div>':`<div class="msg err">${esc(pesan(x))}</div>`;if(x.ok){$('p1').value=$('p2').value=''}};
-  const kos=mode=>konfirm('Kosongkan data ulangan?','Tindakan ini tidak dapat dibatalkan.',async()=>{const x=await call('ad_kosongkan',{mode,konfirmasi:'KOSONGKAN'});if(!x.ok)return pesan(x);alert(x.peserta+' peserta dan '+x.hasil+' hasil dihapus.')},'KOSONGKAN');
-  $('k1').onclick=()=>kos('siswa');$('k2').onclick=()=>kos('semua');
-}
-</script></body></html>
+  <script>
+    function login(event) {
+      event.preventDefault();
+
+      const username = document.getElementById("username").value;
+      const password = document.getElementById("password").value;
+
+      if (username === "admin" && password === "admin123") {
+        sessionStorage.setItem("nesacis_admin", "true");
+        window.location.href = "admin.html";
+      } else {
+        document.getElementById("error").textContent =
+          "Username atau password salah.";
+      }
+    }
+  </script>
+</body>
+</html>
