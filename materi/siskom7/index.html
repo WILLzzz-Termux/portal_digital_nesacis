@@ -197,8 +197,8 @@ Software:[
 };
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
 // ===== NAVIGASI =====
-function go(p){$$('section').forEach(s=>s.classList.toggle('on',s.id===p));$$('.nav').forEach(n=>n.classList.toggle('on',n.dataset.p===p));$('#side').classList.remove('open');scrollTo(0,0)}
-$$('.nav').forEach(n=>n.onclick=()=>go(n.dataset.p));
+function go(p){$$('section').forEach(s=>s.classList.toggle('on',s.id===p));$$('.nav[data-p]').forEach(n=>n.classList.toggle('on',n.dataset.p===p));$('#side').classList.remove('open');scrollTo(0,0)}
+$$('.nav[data-p]').forEach(n=>n.onclick=()=>go(n.dataset.p));
 // ===== PETA KONSEP =====
 $('#cmap').innerHTML='<div class="node core">Sistem Komputer</div>'+[["🖥️ Perangkat Keras · Input","Hardware"],["⚙️ Prosesor","Hardware"],["🖨️ Output","Hardware"],["💾 Storage","Hardware"],["🧩 Perangkat Lunak","Software"],["🔗 Interaksi Antar Perangkat","Interaksi Perangkat"],["🛠️ Permasalahan & Spesifikasi","Permasalahan Hardware"],["🔢 Sistem Biner","Bilangan Biner"]].map(([a,b])=>`<div class="node" onclick="openCat('${b}')">${a}</div>`).join('');
 function openCat(c){go('materi');cat(c)}
@@ -233,7 +233,7 @@ function cat(c){if(!unlocked(c)){toast('🔒 Selesaikan tantangan modul "'+MODS[
 function openM(i){const x=M[cur][i],k=cur+'|'+x.t;$('#mb').innerHTML=`${x.i?`<img src="${x.i}" alt="${x.t}" onerror="this.remove()">`:`<div style="font-size:4rem;text-align:center">${x.e}</div>`}<h3 class="grad">${x.t}</h3><p style="line-height:1.7">${x.d}</p><br><button class="btn" onclick="speak(${i})">🔊 Dengarkan</button> <button class="btn o" onclick="closeM()">Tutup</button>`;$('#modal').classList.add('on');
  if(!ST.read[k]){ST.read[k]=1;addXP(5,'membaca '+x.t);cat(cur)}}
 function closeM(){speechSynthesis.cancel();$('#modal').classList.remove('on')}
-function speak(i){if(!('speechSynthesis' in window))return alert('Browser tidak mendukung suara.');speechSynthesis.cancel();const x=M[cur][i],u=new SpeechSynthesisUtterance(x.t+'. '+x.d);u.lang='id-ID';speechSynthesis.speak(u)}
+function speak(i){if(!('speechSynthesis' in window))return toast('Browser tidak mendukung suara.');speechSynthesis.cancel();const x=M[cur][i],u=new SpeechSynthesisUtterance(x.t+'. '+x.d);u.lang='id-ID';speechSynthesis.speak(u)}
 // ---- Tantangan ----
 function chStart(){const c=cur,g=GRP[c]?Object.keys(GRP[c]):null;
  chq={c,g,items:g?shuf(M[c].map(x=>x.t)):[],mc:CQ[c].map(q=>({q:q[0],o:shuf(q[1].map((t,i)=>({t,ok:i===0})))}))};
@@ -252,8 +252,9 @@ xpUI();cat('Hardware');
 // ===== VIRTUAL LAB =====
 function labTab(t){['a','b'].forEach(k=>{$('#lab-'+k).style.display=k===t?'block':'none';$('#lt-'+k).classList.toggle('on',k===t)})}
 // ---- Lab A: Rakit PC Virtual ----  [gambar, nama, watt, poin biaya, (watt PSU)]
-const RO={mb:['motherboard-ddr5.png','Motherboard AM5 DDR5',50,4],ryzen:['prosesor.jpg','AMD Ryzen (AM5)',105,4],intel:['prosesor.jpg','Intel (LGA)',95,4],ram5:['RAM.png','RAM DDR5',5,2],ram4:['RAM.png','RAM DDR4',5,1],ssd:['SSD.png','SSD',5,2],hdd:['HARDDISK.png','Harddisk',10,1],vga:['VGA-CARD-MID.png','VGA Card',150,5],snd:['SOUNDCARD.png','Sound card',10,1],lan:['LANCARD.png','LAN card',5,1],p3:['PSU.png','PSU 300 W',0,1,300],p5:['PSU.png','PSU 500 W',0,2,500],p7:['PSU.png','PSU 750 W',0,3,750],mon:['MONITOR.png','Monitor',30,2]};
-const RS=[['mb','Motherboard',['mb']],['cpu','Prosesor',['ryzen','intel']],['ram','RAM',['ram5','ram4']],['sto','Penyimpanan',['ssd','hdd']],['vga','VGA Card (opsional)',['vga']],['ext','Kartu tambahan (opsional)',['snd','lan']],['psu','Power Supply',['p3','p5','p7']],['mon','Monitor',['mon']]];
+const RO={mb:['motherboard-ddr5.png','Motherboard AM5 DDR5',50,4],mb4:['motherboard-ddr4.png','Motherboard LGA DDR4',45,3],ryzen:['prosesor.jpg','AMD Ryzen (AM5)',105,4],intel:['prosesor.jpg','Intel (LGA)',95,4],ram5:['RAM.png','RAM DDR5',5,2],ram4:['RAM.png','RAM DDR4',5,1],ssd:['SSD.png','SSD',5,2],hdd:['HARDDISK.png','Harddisk',10,1],vga:['VGA-CARD-MID.png','VGA Card',150,5],snd:['SOUNDCARD.png','Sound card',10,1],lan:['LANCARD.png','LAN card',5,1],p3:['PSU.png','PSU 300 W',0,1,300],p5:['PSU.png','PSU 500 W',0,2,500],p7:['PSU.png','PSU 750 W',0,3,750],mon:['MONITOR.png','Monitor',30,2]};
+const MB={mb:{cpu:'ryzen',ram:'ram5',cn:'AMD Ryzen (soket AM5)',rn:'DDR5'},mb4:{cpu:'intel',ram:'ram4',cn:'Intel (soket LGA)',rn:'DDR4'}};
+const RS=[['mb','Motherboard',['mb','mb4']],['cpu','Prosesor',['ryzen','intel']],['ram','RAM',['ram5','ram4']],['sto','Penyimpanan',['ssd','hdd']],['vga','VGA Card (opsional)',['vga']],['ext','Kartu tambahan (opsional)',['snd','lan']],['psu','Power Supply',['p3','p5','p7']],['mon','Monitor',['mon']]];
 const RW=['mb','cpu','ram','sto','psu','mon'];
 const RM=[{n:'PC Tugas Sekolah',d:'Bu Guru butuh PC untuk mengetik dan internet.',r:RW},{n:'PC Desain & Edit Video',d:'Kakak kelas ingin edit video lancar. Wajib SSD, VGA card, dan PSU minimal 500 W.',r:[...RW,'vga'],ssd:1,pm:500},{n:'Hemat Anggaran',d:'Perpustakaan punya batas biaya 15 poin. Tetap harus bisa menyala!',r:RW,b:15}];
 const RIMG=f=>`<img src="${f}" alt="" onerror="this.style.visibility='hidden'">`;
@@ -269,8 +270,8 @@ function labA(){const m=RM[RA.m],c=Object.values(RA.p).reduce((t,k)=>t+RO[k][3],
 function pk(s,k){RA.p[s]==k?delete RA.p[s]:RA.p[s]=k;labA()}
 function cek(){const m=RM[RA.m],p=RA.p,r=[],N={mb:'motherboard',cpu:'prosesor',ram:'RAM',sto:'penyimpanan',psu:'PSU',mon:'monitor',vga:'VGA card'},ms=m.r.filter(s=>!p[s]);
  r.push([!ms.length,ms.length?'Belum terpasang: '+ms.map(s=>N[s]).join(', '):'Semua komponen wajib terpasang']);
- if(p.cpu)r.push([p.cpu=='ryzen','Soket prosesor cocok (motherboard AM5 hanya menerima AMD Ryzen)']);
- if(p.ram)r.push([p.ram=='ram5','Jenis RAM cocok (slot motherboard bertipe DDR5)']);
+ if(p.cpu&&p.mb)r.push([p.cpu==MB[p.mb].cpu,`Soket prosesor cocok (${RO[p.mb][1]} hanya menerima ${MB[p.mb].cn})`]);
+ if(p.ram&&p.mb)r.push([p.ram==MB[p.mb].ram,`Jenis RAM cocok (slot motherboard bertipe ${MB[p.mb].rn})`]);
  const w=Object.values(p).reduce((t,k)=>t+RO[k][2],0);if(p.psu)r.push([RO[p.psu][4]>=w,`Daya cukup (butuh ${w} W, PSU ${RO[p.psu][4]} W)`]);
  if(m.ssd)r.push([p.sto=='ssd','Memakai SSD agar proyek video cepat dibuka']);
  if(m.pm)r.push([!!p.psu&&RO[p.psu][4]>=m.pm,'PSU minimal '+m.pm+' W']);
@@ -317,7 +318,7 @@ qStart();
 // ===== REFLEKSI =====
 let emo='';const EM=[["😄","Paham sekali"],["🙂","Cukup paham"],["😐","Masih ragu"],["😕","Perlu belajar lagi"]];
 $('#emo').innerHTML=EM.map(([e,t],i)=>`<button title="${t}" onclick="emo='${e} ${t}';$$('#emo button').forEach((b,k)=>b.classList.toggle('on',k==${i}))">${e}</button>`).join('');
-function exportPDF(){const J=window.jspdf;if(!J)return alert('Library jsPDF belum termuat (butuh internet).');
+function exportPDF(){const J=window.jspdf;if(!J)return toast('Library jsPDF belum termuat (butuh internet).');
  const d=new J.jsPDF(),L=[];let y=18;const w=(t,s=11,b=false)=>{d.setFontSize(s);d.setFont('helvetica',b?'bold':'normal');d.splitTextToSize(t,175).forEach(l=>{if(y>280){d.addPage();y=18}d.text(l,18,y);y+=s*.5+2})};
  w('JURNAL HASIL BELAJAR - Bab 4 Sistem Komputer',15,true);y+=3;
  w('Nama: '+($('#rn').value||'-'));w('Kelas: '+($('#rk').value||'-'));w('Tanggal: '+new Date().toLocaleDateString('id-ID'));
@@ -330,7 +331,8 @@ function exportPDF(){const J=window.jspdf;if(!J)return alert('Library jsPDF belu
  ['Sistem komputer = perangkat keras + perangkat lunak.','Hardware: input, pemroses (CPU, RAM, ROM), output, storage.','Software: sistem operasi dan program aplikasi; lisensi freeware, shareware, adware, komersial, open/closed source.','Interaksi perangkat: Bluetooth, tethering, CCTV.','Komputer menyimpan data dalam biner (bit, byte, ASCII).'].forEach(t=>w('- '+t));
  d.save('Jurnal-Sistem-Komputer-'+($('#rn').value||'siswa')+'.pdf')}
 // ===== RESET DATA =====
-function resetData(){if(!confirm('Reset semua data? XP, progres modul, skor kuis, dan isian refleksi akan dihapus.'))return;
+function resetData(){$('#mb').innerHTML='<h3>🗑️ Reset Data?</h3><p style="line-height:1.7">XP, progres modul, skor kuis, dan isian refleksi akan dihapus.</p><br><button class="btn" style="background:var(--no);color:#fff" onclick="doReset()">Ya, reset</button> <button class="btn o" onclick="closeM()">Batal</button>';$('#modal').classList.add('on');$('#side').classList.remove('open')}
+function doReset(){closeM();
  try{localStorage.removeItem('cyberB4')}catch(e){}
  ST={xp:0,read:{},done:{}};qScore=null;RA={m:0,p:{},t:0};RB=[0,0,0];emo='';
  ['rn','r1','r2','r3','rj'].forEach(i=>$('#'+i).value='');$('#rk').value='VII';$$('#emo button').forEach(b=>b.classList.remove('on'));
